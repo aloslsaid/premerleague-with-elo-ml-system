@@ -15,3 +15,8 @@ The root includes `E0.csv` and the numbered `E0 (...) .csv` files. Confirm each 
 5. Preserve match chronology when creating rolling features and updating ELO. Split evaluation data by time to avoid future-information leakage.
 
 No test suite or model result is reproduced by these instructions. Record the data versions, ELO parameters, feature definitions, time-based split, and metrics when reporting experiments. Predictions are not betting advice.
+
+
+## Evaluation integrity
+
+Model selection uses chronological 70% training / 15% validation / 15% final test periods. The best estimator is selected by validation F1; the latest period is reserved for a one-time held-out report. After reporting that test result, the chosen estimator and scaler (when required) are refit on all earlier development matches for future fixture predictions.
