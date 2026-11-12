@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.preprocessing import StandardScaler
+from sklearn.base import clone
 
 from sklearn.linear_model import LogisticRegression
 
@@ -393,301 +394,107 @@ X = data[
 
 y = data["Target"]
 
-split = int(len(data) * 0.80
+if len(data) < 30:
+    raise ValueError("At least 30 historical matches with valid rolling features are required.")
 
-)
+# Chronological holdout: train on the earliest 70%, select on the next 15%,
+# and keep the latest 15% untouched until final evaluation.
+train_end = int(len(data) * 0.70)
+validation_end = int(len(data) * 0.85)
 
-X_train = X.iloc[:split]
+X_train = X.iloc[:train_end].copy()
+X_validation = X.iloc[train_end:validation_end].copy()
+X_test = X.iloc[validation_end:].copy()
+y_train = y.iloc[:train_end].copy()
+y_validation = y.iloc[train_end:validation_end].copy()
+y_test = y.iloc[validation_end:].copy()
 
-X_test = X.iloc[split:]
-
-y_train = y.iloc[:split]
-
-y_test = y.iloc[split:]
-
-scaler = StandardScaler()
-
-X_train_scaled = scaler.fit_transform(
-
-    X_train
-
-)
-
-X_test_scaled = scaler.transform(
-
-    X_test
-
-)
+scaled_model_names = {"Logistic Regression", "KNN", "SVM"}
+train_scaler = StandardScaler()
+X_train_scaled = train_scaler.fit_transform(X_train)
+X_validation_scaled = train_scaler.transform(X_validation)
+X_test_scaled = train_scaler.transform(X_test)
 
 models = {
-
-    "Logistic Regression":
-
-        LogisticRegression(
-
-            max_iter=1000
-
-        ),
-
-    "Decision Tree":
-
-        DecisionTreeClassifier(
-
-            max_depth=5,
-
-            min_samples_leaf=10,
-
-            random_state=42
-
-        ),
-
-    "Random Forest":
-
-        RandomForestClassifier(
-
-            n_estimators=300,
-
-            max_depth=8,
-
-            min_samples_leaf=5,
-
-            random_state=42
-
-        ),
-
-    "Gradient Boosting":
-
-        GradientBoostingClassifier(
-
-            n_estimators=200,
-
-            learning_rate=0.05,
-
-            max_depth=3,
-
-            random_state=42
-
-        ),
-
-    "KNN":
-
-        KNeighborsClassifier(
-
-            n_neighbors=15
-
-        ),
-
-    "SVM":
-
-        SVC(
-
-            kernel="rbf",
-
-            probability=True
-
-        )
-
+    "Logistic Regression": LogisticRegression(max_iter=1000),
+    "Decision Tree": DecisionTreeClassifier(
+        max_depth=5, min_samples_leaf=10, random_state=42
+    ),
+    "Random Forest": RandomForestClassifier(
+        n_estimators=300, max_depth=8, min_samples_leaf=5, random_state=42
+    ),
+    "Gradient Boosting": GradientBoostingClassifier(
+        n_estimators=200, learning_rate=0.05, max_depth=3, random_state=42
+    ),
+    "KNN": KNeighborsClassifier(n_neighbors=15),
+    "SVM": SVC(kernel="rbf", probability=True, random_state=42),
 }
 
-results = []
-
-trained_models = {}
-
-for name, model in models.items():
-
-    if name in [
-
-        "Logistic Regression",
-
-        "KNN",
-
-        "SVM"
-
-    ]:
-
-        model.fit(
-
-            X_train_scaled,
-
-            y_train
-
-        )
-
-        predictions = model.predict(
-
-            X_test_scaled
-
-        )
-
+validation_results = []
+validation_models = {}
+for name, estimator in models.items():
+    model = clone(estimator)
+    if name in scaled_model_names:
+        train_data, validation_data = X_train_scaled, X_validation_scaled
     else:
+        train_data, validation_data = X_train, X_validation
 
-        model.fit(
+    model.fit(train_data, y_train)
+    validation_predictions = model.predict(validation_data)
+    validation_results.append({
+        "Model": name,
+        "Validation Accuracy": accuracy_score(y_validation, validation_predictions),
+        "Validation Precision": precision_score(
+            y_validation, validation_predictions, average="weighted", zero_division=0
+        ),
+        "Validation Recall": recall_score(
+            y_validation, validation_predictions, average="weighted", zero_division=0
+        ),
+        "Validation F1": f1_score(
+            y_validation, validation_predictions, average="weighted", zero_division=0
+        ),
+    })
+    validation_models[name] = model
 
-            X_train,
-
-            y_train
-
-        )
-
-        predictions = model.predict(
-
-            X_test
-
-        )
-
-    accuracy = accuracy_score(
-
-        y_test,
-
-        predictions
-
-    )
-
-    precision = precision_score(
-
-        y_test,
-
-        predictions,
-
-        average="weighted",
-
-        zero_division=0
-
-    )
-
-    recall = recall_score(
-
-        y_test,
-
-        predictions,
-
-        average="weighted",
-
-        zero_division=0
-
-    )
-
-    f1 = f1_score(
-
-        y_test,
-
-        predictions,
-
-        average="weighted",
-
-        zero_division=0
-
-    )
-
-    results.append(
-
-        {
-
-            "Model": name,
-
-            "Accuracy": accuracy,
-
-            "Precision": precision,
-
-            "Recall": recall,
-
-            "F1": f1
-
-        }
-
-    )
-
-    trained_models[name] = model
-
-results_df = pd.DataFrame(
-
-    results
-
-)
-
-results_df = results_df.sort_values(
-
-    "F1",
-
-    ascending=False
-
+results_df = pd.DataFrame(validation_results).sort_values(
+    "Validation F1", ascending=False
 ).reset_index(drop=True)
+print("\\nMODEL COMPARISON (CHRONOLOGICAL VALIDATION)")
+print(results_df.to_string(index=False))
 
-print("\nMODEL RESULTS")
-
-print("=" * 70)
-
-print(
-
-    results_df.to_string(
-
-        index=False
-
-    )
-
-)
-
-best_model_name = (
-
-    results_df.iloc[0]["Model"]
-
-)
-
-best_model = trained_models[
-
-    best_model_name
-
-]
-
-print(
-
-    "\nBEST MODEL:",
-
-    best_model_name
-
-)
-
-if best_model_name in [
-
-    "Logistic Regression",
-
-    "KNN",
-
-    "SVM"
-
-]:
-
-    test_predictions = best_model.predict(
-
-        X_test_scaled
-
-    )
-
+best_model_name = results_df.iloc[0]["Model"]
+selected_model = validation_models[best_model_name]
+if best_model_name in scaled_model_names:
+    test_data = X_test_scaled
 else:
+    test_data = X_test
+test_predictions = selected_model.predict(test_data)
 
-    test_predictions = best_model.predict(
+print("\\nSELECTED MODEL:", best_model_name)
+print("HELD-OUT TEST METRICS")
+print("Accuracy:", accuracy_score(y_test, test_predictions))
+print("Precision:", precision_score(
+    y_test, test_predictions, average="weighted", zero_division=0
+))
+print("Recall:", recall_score(
+    y_test, test_predictions, average="weighted", zero_division=0
+))
+print("F1:", f1_score(
+    y_test, test_predictions, average="weighted", zero_division=0
+))
+print("\\nHELD-OUT CONFUSION MATRIX")
+print(confusion_matrix(y_test, test_predictions, labels=["H", "D", "A"]))
 
-        X_test
-
-    )
-
-print("\nCONFUSION MATRIX")
-
-print("=" * 70)
-
-print(
-
-    confusion_matrix(
-
-        y_test,
-
-        test_predictions,
-
-        labels=["H", "D", "A"]
-
-    )
-
-)
+# Refit the selected model on all historical development data for future fixtures.
+X_development = X.iloc[:validation_end]
+y_development = y.iloc[:validation_end]
+scaler = StandardScaler()
+if best_model_name in scaled_model_names:
+    development_data = scaler.fit_transform(X_development)
+else:
+    development_data = X_development
+best_model = clone(models[best_model_name])
+best_model.fit(development_data, y_development)
 
 def predict_match(
 
