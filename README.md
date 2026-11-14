@@ -1,17 +1,51 @@
-# Premier League Match Prediction with ELO
+# Premier League ELO + Machine Learning Predictor
 
-An experimental English Premier League match-outcome prediction project. Its stated approach updates team ELO ratings in chronological order and combines team strength with recent performance. The repository contains several season CSV files, a file named `2 match`, and this README; inspect the data and project file before assuming a runnable script is present.
+> A football match prediction experiment combining dynamic ELO team ratings with recent-form features and supervised classification.
 
-## Data
+## Concept
+Raw league tables and season totals can hide how team strength changes over time. This project maintains an ELO rating for each team and updates it after every completed fixture. The current ratings, together with recent goal-difference form, become inputs to machine-learning models that estimate match outcomes.
 
-The root includes `E0.csv` and the numbered `E0 (...) .csv` files. Confirm each file's season, columns, source, and license before training or redistribution. Do not combine seasons without checking duplicate matches and consistent schemas.
+## How the pipeline works
+1. Load and combine the historical Premier League season files.
+2. Keep the date, home team, away team, full-time goals, and result fields required by the rating engine.
+3. Parse dates and sort matches chronologically.
+4. Initialize team ratings at 1500.
+5. Calculate expected home-win probability from the rating difference using the standard ELO logistic formula.
+6. Compare the expected result with the actual result and update both teams' ratings using a K-factor.
+7. Track each team's recent match history and calculate rolling goal-difference features from the previous five matches.
+8. Build a match dataset from pre-match information and train classification models.
+9. Compare predictions using Accuracy, Precision, Recall, F1-score, and a confusion matrix.
 
-## Getting started
+## Why ELO?
+ELO provides a compact, continuously updated estimate of relative team strength. It is complementary to recent-form features: ratings summarize longer-term strength, while recent goal difference captures a shorter-term performance signal.
 
-1. Clone the repository and inspect the CSV headers and date ranges.
-2. Confirm the contents/type of `2 match` and identify the intended training code.
-3. Install Python and create a virtual environment.
-4. No root `requirements.txt` or verified run command is currently present; determine dependencies from the actual source before installing.
-5. Preserve match chronology when creating rolling features and updating ELO. Split evaluation data by time to avoid future-information leakage.
+## Models
+The script imports Scikit-learn classifiers including Logistic Regression, Decision Tree, Random Forest, Gradient Boosting, KNN, and SVM. The experiment compares their classification performance rather than assuming one algorithm is universally best.
 
-No test suite or model result is reproduced by these instructions. Record the data versions, ELO parameters, feature definitions, time-based split, and metrics when reporting experiments. Predictions are not betting advice.
+## Installation
+Python 3.10+ is recommended.
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install pandas numpy scikit-learn
+```
+
+## Run
+```bash
+python "2 match"
+```
+Run from the repository root. The script expects `E0.csv` and `E0 (2).csv` through `E0 (5).csv` in that directory.
+
+## Validation discipline
+The ELO rating and rolling statistics must be updated only after a match has been represented using pre-match features; otherwise, future information can leak into training. Treat all scores as historical experimental results, not a guarantee of future match outcomes or betting returns.
+
+## Repository contents
+- `2 match` — ELO calculation, feature generation, training, and evaluation.
+- `E0*.csv` — historical Premier League match data.
+
+## Skills demonstrated
+ELO rating systems · Sequential feature engineering · Football analytics · Multi-class classification · Model comparison · Confusion-matrix analysis
